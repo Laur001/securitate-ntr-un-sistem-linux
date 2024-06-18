@@ -1,4 +1,6 @@
 # securitate-ntr-un-sistem-linux
 
 
-# update
+# update 
+
+# update 2
