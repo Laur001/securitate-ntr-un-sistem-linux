@@ -1,3 +1,5 @@
+#!/bin/bash
+
 check_running_processes() {
     echo "Verific procesele active..."
 
@@ -17,5 +19,64 @@ check_running_processes() {
     echo "Verificarea proceselor active s-a incheiat."
 }
 
+
+check_permissions() {
+    echo "Verificare permisiuni de securitate..."
+
+    critical_files=(
+        "/etc/passwd"
+        "/etc/shadow"
+        "/etc/group"
+        "/etc/gshadow"
+        "/root"
+    )
+
+
+    for file in "${critical_files[@]}"; do
+        if [ -e "$file" ]; then
+            permissions=$(stat -c "%a" "$file")
+            owner=$(stat -c "%U" "$file")
+            group=$(stat -c "%G" "$file")
+
+            echo "Verific $file - Permisiuni: $permissions, Proprietar: $owner, Grup: $group"
+
+
+            case "$file" in
+                "/etc/passwd")
+                    if [ "$permissions" -ne 644 ] || [ "$owner" != "root" ]; then
+                        echo "Problema de securitate cu $file"
+                    fi
+                    ;;
+                "/etc/shadow")
+                    if [ "$permissions" -ne 600 ] || [ "$owner" != "root" ]; then
+                        echo "Problema de securitate cu $file"
+                    fi
+                    ;;
+                "/etc/group")
+                    if [ "$permissions" -ne 644 ] || [ "$owner" != "root" ]; then
+                        echo "Problema de securitate cu $file"
+                    fi
+                    ;;
+                "/etc/gshadow")
+                    if [ "$permissions" -ne 600 ] || [ "$owner" != "root" ]; then
+                        echo "Problema de securitate cu $file"
+                    fi
+                    ;;
+                "/root")
+                    if [ "$permissions" -ne 700 ] || [ "$owner" != "root" ]; then
+                        echo "Problema de securitate cu $file"
+                    fi
+                    ;;
+                *)
+                    echo "Fisier necunoscut $file"
+                    ;;
+            esac
+        else
+            echo "Fisierul $file nu exista"
+        fi
+    done
+
+    echo "Verificarea permisiunilor s-a incheiat."
+}
 
 check_running_processes
