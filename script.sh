@@ -79,4 +79,30 @@ check_permissions() {
     echo "Verificarea permisiunilor s-a incheiat."
 }
 
+
+
+check_executables_permissions() {
+    echo "Verificare permisiun executabilelor..."
+
+
+    executables=$(find / -type f -executable 2>/dev/null)
+    echo "executbile gasite"
+
+
+    for file in $executables; do
+        permissions=$(stat -c "%a" "$file")
+        owner=$(stat -c "%U" "$file")
+        group=$(stat -c "%G" "$file")
+
+
+        if [ "$permissions" != "755" ] || [ "$owner" != "root" ]; then
+            echo "Problema de securitate cu $file - Permisiuni: $permissions, Proprietar: $owner, Grup: $group"
+        fi
+    done
+
+    echo "Verificarea permisiunilor executabilelor s-a incheiat."
+}
+
 check_running_processes
+check_permissions
+check_executables_permissions
