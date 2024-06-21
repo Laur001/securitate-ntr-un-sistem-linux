@@ -1,9 +1,11 @@
 # securitate intr-un sistem linux
 
 # 19.06.2024 
-- check_running_processes()
+- running_processes()
 - functie care realizeaza verificarea proceselor active in sistem 
-- functia verifica daca procesele care ruleaza apartin utilizatorului
+- functia are un parametru whitelist, care este un array de procese legitime care trebuie sa ruleze in sistem 
+- se extrag toate procesele existente din sistem si se verifica daca fiecare membru din while list se afla in procesele care ruleaza la acel moment; daca procesul din white list nu este gasit este raportat ca fiind lipsa si trebuie verificat in detaliu ce se intampla cu el 
+- de asemenea functia verifica si cate resusre foloseste acel proces; in cazul in care un proces foloseste prea multe resusre este raportar ca fiind suspect pentru a se studia mai amanuntit
 
 # 20.06.2024
 - check_permissions() 
