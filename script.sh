@@ -13,14 +13,15 @@ zenity --info --text="Verificare Securitate Sistem - $(date)" | tee -a $LOGFILE
 check_processes() {
     processes=$(ps -eo user,pid,etime,cmd --sort=-%cpu,-%mem --no-headers)
     total_processes=$(echo "$processes" | wc -l)
-    
+
     zenity --info --text="Verificare procese active..." | tee -a $LOGFILE
-    
+
     echo "$processes" > /tmp/running_processes.txt
     zenity --text-info --filename=/tmp/running_processes.txt
 
     declare -a critical_users=("root" "www-data" "mysql" "postgres")
     declare -a known_malicious=("malware1" "malware2" "malicious_script")
+    declare -a trusted_paths=("/bin" "/usr/bin" "/sbin" "/usr/sbin" "/usr/local/bin")
 
     suspect_found=0
 
@@ -43,8 +44,8 @@ check_processes() {
             suspect_found=1
         fi
 
-        cmd_path=$(echo "$cmd" | awk '{print $1}')
-        if [[ ! " ${trusted_paths[@]} " =~ " ${cmd_path%/*} " ]]; then
+        cmd_dir=$(dirname "$cmd")
+        if [[ ! " ${trusted_paths[@]} " =~ " ${cmd_dir} " ]]; then
             PROBLEMS+=("Proces cu cale neacreditata: Utilizator $user, PID $pid, Comanda: $cmd_full")
             suspect_found=1
         fi
@@ -80,6 +81,7 @@ check_processes() {
 
     return $suspect_found
 }
+
 
 check_permissions() {
     critical_files=(
@@ -275,20 +277,47 @@ check_for_viruses() {
 }
 
 monitor_network_traffic() {
-    zenity --info --text="Monitorizare trafic retea pentru 20 de secunde..." | tee -a $LOGFILE
-    
+ 
+    zenity --info --text="Monitorizare trafic retea pentru 20 de secunde..." | tee -a "$LOGFILE"
+
     if ! command -v iftop &> /dev/null; then
-        zenity --info --text="iftop nu este instalat. Instalare iftop..." | tee -a $LOGFILE
-        apt-get update
-        apt-get install -y iftop
+        zenity --info --text="iftop nu este instalat. Instalare iftop..." | tee -a "$LOGFILE"
+        if sudo apt-get update && sudo apt-get install -y iftop; then
+            zenity --info --text="iftop a fost instalat cu succes." | tee -a "$LOGFILE"
+        else
+            zenity --error --text="Nu s-a putut instala iftop. Verificati jurnalul pentru detalii." | tee -a "$LOGFILE"
+            return 1
+        fi
     fi
 
-    {
+    check_malicious_traffic() {
+        local iftop_output="$1"
+        local malicious_detected=0
+        local PROBLEMS=()  
 
+        local malicious_patterns=(
+            "irc"          
+            "malware"     
+            "exploit"      
+            "ssh bruteforce" 
+        )
+
+        for pattern in "${malicious_patterns[@]}"; do
+            if grep -q "$pattern" <<< "$iftop_output"; then
+                PROBLEMS+=("Detectat trafic de retea potential malitios: $pattern")
+                malicious_detected=1
+            fi
+        done
+
+        PROBLEMS_GLOBAL=("${PROBLEMS[@]}")
+        return $malicious_detected
+    }
+
+    {
         iftop -t -s 20 > /tmp/iftop_output &
         IFTOP_PID=$!
 
-        for i in {1..20}; do
+        for ((i = 1; i <= 20; i++)); do
             echo $((i * 100 / 20))
             sleep 1
         done
@@ -298,7 +327,19 @@ monitor_network_traffic() {
 
     zenity --text-info --title="Detalii Trafic Retea" --filename=/tmp/iftop_output
 
-    zenity --info --text="Monitorizarea traficului retelei s-a incheiat." | tee -a $LOGFILE
+
+    if check_malicious_traffic "$(cat /tmp/iftop_output)"; then
+        if [ ${#PROBLEMS_GLOBAL[@]} -gt 0 ]; then
+            zenity --warning --text="S-a detectat trafic de retea potential malitios." | tee -a "$LOGFILE"
+        else
+            zenity --info --text="Nu s-a detectat trafic de retea potential malitios." | tee -a "$LOGFILE"
+        fi
+    else
+        zenity --info --text="Nu s-a detectat trafic de retea potential malitios." | tee -a "$LOGFILE"
+    fi
+
+
+    zenity --info --text="Monitorizarea traficului retelei s-a incheiat." | tee -a "$LOGFILE"
 }
 
 
@@ -343,19 +384,33 @@ check_file_checksums() {
     checksum_file="/var/log/file_checksums.log"
     if [ ! -f "$checksum_file" ]; then
         find /etc -type f -exec sha256sum {} + > "$checksum_file"
-        zenity --info --text="Fisierul de control al checksum-urilor a fost creat." | tee -a $LOGFILE
+        zenity --info --text="Fisierul de control al checksum-urilor a fost creat." | tee -a "$LOGFILE"
     fi
 
     current_checksums=$(find /etc -type f -exec sha256sum {} +)
     previous_checksums=$(cat "$checksum_file")
 
     if diff <(echo "$current_checksums") <(echo "$previous_checksums") > /dev/null; then
-        zenity --info --text="Nu au fost gasite modificari in checksum-urile fisierelor din /etc." | tee -a $LOGFILE
+        zenity --info --text="Nu au fost gasite modificari in checksum-urile fisierelor din /etc." | tee -a "$LOGFILE"
     else
-        zenity --warning --text="Au fost gasite modificari in checksum-urile fisierelor din /etc." | tee -a $LOGFILE
-        PROBLEMS+=("Modificari in checksum-urile fisierelor din /etc")
+       
+        zenity --question --text="Au fost gasite modificari in checksum-urile fisierelor din /etc. Doriti sa verificati aceste modificari?" \
+            --ok-label="Da" --cancel-label="Nu" | tee -a "$LOGFILE"
+
+        if [ $? -eq 0 ]; then
+
+            diff_output=$(diff <(echo "$current_checksums") <(echo "$previous_checksums"))
+            zenity --text-info --title="Modificari in checksum-urile fisierelor din /etc" --width=800 --height=600 --filename=<(echo "$diff_output") | tee -a "$LOGFILE"
+            
+
+            PROBLEMS+=("Modificari in checksum-urile fisierelor din /etc")
+        else
+
+            echo "Modificari in checksum-urile fisierelor din /etc respinse de utilizator." | tee -a "$LOGFILE"
+        fi
     fi
 }
+
 
 check_package_integrity() {
  
@@ -441,14 +496,54 @@ check_suspicious_files() {
 check_open_ports() {
     echo "70" | zenity --progress --title="System Check" --text="Checking open ports..." --percentage=70 --auto-close --no-cancel
 
-    open_ports=$(netstat -tuln | grep LISTEN | awk '{print $4}')
-    for port in $open_ports; do
-        if ! grep -q "$port" /etc/services; then
-            PROBLEMS+=("Port necunoscut deschis: $port")
-        fi
-    done
+    open_ports=$(ss -tuln | awk 'NR>1{print $5}' | sed 's/.*://')
+    known_ports=$(cat /etc/services | awk '{print $2}' | grep -oP '\d+')
 
-    zenity --info --text="Verificarea porturilor deschise s-a incheiat." | tee -a $LOGFILE
+    PROGRESS_PERCENT=70
+    total_ports=$(echo "$open_ports" | wc -l)
+    current_port=0
+
+    for port in $open_ports; do
+        current_port=$((current_port + 1))
+        PROGRESS_PERCENT=$((70 + (current_port * 30 / total_ports)))
+        
+        if ! echo "$known_ports" | grep -q "^$port$"; then
+            port_details=$(ss -tuln | grep ":$port " | awk '{print $1, $5}')
+            PROBLEMS+=("Port necunoscut deschis: $port ($port_details)")
+        fi
+
+        echo "$PROGRESS_PERCENT"
+        echo "# Checking port $current_port of $total_ports: $port"
+    done | tee -a $LOGFILE
+
+    echo "100" | zenity --progress --title="System Check" --text="Finalizing open ports check..." --percentage=100 --auto-close --no-cancel
+
+    if [ ${#PROBLEMS[@]} -gt 0 ]; then
+        zenity --question --text="Au fost gasite porturi deschise necunoscute. Doriti sa verificati aceste modificari?" --ok-label="Da" --cancel-label="Nu" | tee -a "$LOGFILE"
+        
+        if [ $? -eq 0 ]; then
+            details=$(printf "%s\n" "${PROBLEMS[@]}")
+            action=$(zenity --list --radiolist --title="Actiuni pentru porturi necunoscute" --text="Selectati actiunea:" --column="Select" --column="Actiune" TRUE "Inchide porturile" FALSE "Notifica administratorul")
+            
+            if [ "$action" = "Inchide porturile" ]; then
+                for port in $open_ports; do
+                    if ! echo "$known_ports" | grep -q "^$port$"; then
+                        fuser -k "$port/tcp"
+                        fuser -k "$port/udp"
+                        echo "Port $port inchis." | tee -a $LOGFILE
+                    fi
+                done
+                zenity --info --text="Porturile necunoscute au fost inchise." | tee -a $LOGFILE
+            else
+                echo "$details" | mail -s "Porturi necunoscute deschise" admin@example.com
+                zenity --info --text="Administratorul a fost notificat." | tee -a $LOGFILE
+            fi
+        else
+            echo "Modificari in porturile deschise respinse de utilizator." | tee -a "$LOGFILE"
+        fi
+    else
+        zenity --info --text="Nu au fost gasite porturi necunoscute deschise." | tee -a $LOGFILE
+    fi
 }
 
 check_rootkits() {
