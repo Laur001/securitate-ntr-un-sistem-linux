@@ -250,6 +250,12 @@ check_executables_permissions() {
             PROBLEMS+=("Executabil cunoscut ca fiind rau intentionat: $file")
         fi
 
+        if [[ "$file" == *.sh || "$file" == *.py || "$file" == *.pl ]]; then
+            if grep -qiE "(rm -rf|dd if=|:(){|mkfs\.)" "$file"; then
+                PROBLEMS+=("Executabil $file contine comenzi periculoase")
+            fi
+        fi
+
     done <<< "$executables" | zenity --progress --auto-close --title="Verificare permisiuni executabile" --text="Verificare executabile..." --percentage=0
 
     zenity --info --text="Verificarea permisiunilor executabilelor s-a incheiat." | tee -a $LOGFILE
