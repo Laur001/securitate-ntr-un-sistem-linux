@@ -19,7 +19,7 @@ check_processes() {
     echo "$processes" > /tmp/running_processes.txt
     zenity --text-info --filename=/tmp/running_processes.txt
 
-    declare -a critical_users=("root" "www-data" "mysql" "postgres")
+    # declare -a critical_users=("root" "www-data" "mysql" "postgres")
     declare -a known_malicious=("WannaCry" "NotPetya" "Mirai")
     declare -a trusted_paths=("/bin" "/usr/bin" "/sbin" "/usr/sbin" "/usr/local/bin")
 
@@ -38,11 +38,6 @@ check_processes() {
         echo "# Verificare proces PID: $pid"
 
         echo "Checking process: User=$user, PID=$pid, Etime=$etime, Cmd=$cmd_full" >> $LOGFILE
-
-        if [[ ! " ${critical_users[@]} " =~ " ${user} " ]]; then
-            PROBLEMS+=("Proces necunoscut rulat de utilizator necunoscut: Utilizator $user, PID $pid, Comanda: $cmd_full")
-            suspect_found=1
-        fi
 
         cmd_dir=$(dirname "$cmd")
         if [[ ! " ${trusted_paths[@]} " =~ " ${cmd_dir} " ]]; then
