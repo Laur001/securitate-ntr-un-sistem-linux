@@ -67,9 +67,13 @@ check_processes() {
         fi
 
         child_processes=$(pgrep -P $pid)
-        if [ -n "$child_processes" ]; then
+        if [ -n "$child_processes" ] && [ $suspect_found -eq 1 ]; then
             PROBLEMS+=("Proces cu procese copil: Utilizator $user, PID $pid, Comanda: $cmd_full, Copii: $child_processes")
-            suspect_found=1
+
+            for child in $child_processes; do
+                child_cmd_full=$(ps -p $child -o args=)
+                PROBLEMS+=("Proces copil suspect: PID $child, Comanda: $child_cmd_full")
+            done
         fi
 
     done <<< "$processes" | zenity --progress --auto-close --title="Verificare procese active" --text="Verificare procese..." --percentage=0
