@@ -20,7 +20,7 @@ check_processes() {
     zenity --text-info --filename=/tmp/running_processes.txt
 
     declare -a critical_users=("root" "www-data" "mysql" "postgres")
-    declare -a known_malicious=("malware1" "malware2" "malicious_script")
+    declare -a known_malicious=("WannaCry" "NotPetya" "Mirai")
     declare -a trusted_paths=("/bin" "/usr/bin" "/sbin" "/usr/sbin" "/usr/local/bin")
 
     suspect_found=0
